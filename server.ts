@@ -5,10 +5,23 @@ import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// When compiled with `bun build --compile`, import.meta.url points into the
-// embedded bundle, so we resolve paths next to the executable instead.
-const compiled = import.meta.url.includes("$bunfs") || import.meta.url.includes("~BUN");
-const ROOT = compiled ? dirname(process.execPath) : dirname(fileURLToPath(import.meta.url));
+// Resolve the app root by checking where public/ actually lives: next to the
+// executable (compiled binary), next to this script (bun/node from source), or
+// the working directory. String-sniffing bun's virtual bundle paths broke on
+// Windows, where the embedded path ends up URL-encoded in import.meta.url.
+function findRoot(): string {
+  const candidates = [
+    dirname(process.execPath),
+    (() => { try { return dirname(fileURLToPath(import.meta.url)); } catch { return ""; } })(),
+    process.cwd(),
+  ];
+  for (const c of candidates) {
+    if (c && existsSync(join(c, "public", "config.html"))) return c;
+  }
+  console.error("Could not find the public/ folder. Keep it next to the executable.");
+  return process.cwd();
+}
+const ROOT = findRoot();
 
 const PORT = Number(process.env.PORT ?? 8976);
 const REDIRECT_URI = `http://127.0.0.1:${PORT}/callback`;
