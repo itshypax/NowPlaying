@@ -19,12 +19,8 @@ The widget shows title, artist, cover art and a progress display in five styles 
 
 | | |
 |---|---|
-| ![Default: animated line, cover on the left](docs/examples/line-default.png) Default look — animated line, cover on the left | ![Bar waveform on a blurred cover backdrop](docs/examples/backdrop-wave.png) `?style=wave&cover=backdrop` |
-| ![Compact mode with the comet style](docs/examples/compact-comet.png) `?compact=1&style=comet` | ![Liquid style on a light custom background](docs/examples/liquid-light.png) `?style=liquid&bg=f4f4f6&bgo=95` |
-
-![Up Next banner appearing before the end of the song](docs/examples/next-banner.png)
-
-`?next=15` — the "Up Next" banner slides in a few seconds before the song ends, with a countdown strip along its bottom edge.
+| ![Default look: animated line, cover on the left](docs/examples/line-default.png) Default look — animated line, cover on the left | ![Compact mode](docs/examples/compact-line.png) `?compact=1` — single line, smaller cover |
+| ![Liquid style with the Up Next banner](docs/examples/liquid-next.png) `?style=liquid&next=15` — liquid fill, "Up Next" with countdown | ![Comet style with arrows animation](docs/examples/comet-arrows.png) `?style=comet&animstyle=arrows&next=15` — comet trail, chevrons pulsing toward the next track |
 
 ## Connect Spotify
 
