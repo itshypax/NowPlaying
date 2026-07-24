@@ -1,0 +1,1046 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Now Playing Overlay</title>
+<style>
+  :root {
+    --radius: 16px;
+    --w: 420px;
+    --accent: #6ee7b7;
+    --font: system-ui, "Segoe UI", sans-serif;
+  }
+  html, body {
+    margin: 0;
+    background: transparent;
+    overflow: hidden;
+  }
+  #widget {
+    position: relative;
+    width: var(--w);
+    border-radius: var(--radius);
+    overflow: hidden;
+    font-family: var(--font);
+    color: #fff;
+    background: var(--card-bg, rgba(16, 18, 22, 0.82));
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity .5s ease, transform .5s ease;
+  }
+  /* light background color picked: switch text to dark, otherwise unreadable */
+  #widget.light { color: #16181d; }
+  #widget.light #title { text-shadow: none; }
+  #widget.light #cover { box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2); }
+  #widget.light #next { background: rgba(0, 0, 0, 0.06); border-top-color: rgba(0, 0, 0, 0.1); }
+  #widget.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  #backdrop {
+    position: absolute;
+    inset: -24px;
+    background-size: cover;
+    background-position: center;
+    filter: blur(24px) saturate(1.3) brightness(0.55);
+    display: none;
+  }
+  #widget.has-backdrop #backdrop { display: block; }
+  #widget.has-backdrop { background: rgba(16, 18, 22, 0.4); }
+  #inner {
+    position: relative;
+    padding: 14px 16px 12px;
+  }
+  #label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    opacity: 0.65;
+    margin-bottom: 8px;
+  }
+  #label:empty { display: none; }
+  #row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  #cover {
+    width: 72px;
+    height: 72px;
+    border-radius: calc(var(--radius) * 0.55);
+    object-fit: cover;
+    flex-shrink: 0;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+    display: none;
+  }
+  #widget.has-cover #cover { display: block; }
+  #meta { min-width: 0; flex: 1; }
+  #title {
+    font-size: 17px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  }
+  #artist {
+    font-size: 13px;
+    opacity: 0.8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 2px;
+  }
+  #wave {
+    display: block;
+    width: 100%;
+    height: 34px;
+    margin-top: 10px;
+  }
+  #times {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.7;
+    margin-top: 2px;
+  }
+  /* light streak that sweeps across the card once on track change */
+  #sweep {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.16) 50%, transparent 65%);
+    transform: translateX(-100%);
+  }
+  #widget.light #sweep {
+    background: linear-gradient(105deg, transparent 35%, rgba(0, 0, 0, 0.09) 50%, transparent 65%);
+  }
+  #widget.sweeping #sweep { animation: sweep .55s ease-out both; }
+  @keyframes sweep {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(100%); }
+  }
+  /* arrows mode: chevrons flying across the card on track change */
+  #arrows {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    display: none;
+  }
+  #widget.anim-arrows #arrows { display: block; }
+  #arrows span {
+    position: absolute;
+    top: 50%;
+    left: -10%;
+    transform: translateY(-55%);
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--accent2, var(--accent));
+    opacity: 0;
+  }
+  #widget.arrowing #arrows span { animation: arrowFly .5s ease-in both; }
+  #widget.arrowing #arrows span:nth-child(2) { animation-delay: .07s; }
+  #widget.arrowing #arrows span:nth-child(3) { animation-delay: .14s; }
+  @keyframes arrowFly {
+    0% { opacity: 0; left: -10%; }
+    15% { opacity: 1; }
+    85% { opacity: 1; }
+    100% { opacity: 0; left: 104%; }
+  }
+  /* arrows mode: chevrons pulsing toward the next track while the banner shows */
+  #nextArrows {
+    display: none;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+  #widget.anim-arrows #nextArrows { display: inline-flex; }
+  #nextArrows span { opacity: 0.25; }
+  #next.show #nextArrows span { animation: chevPulse 1.2s infinite; }
+  #next.show #nextArrows span:nth-child(2) { animation-delay: .2s; }
+  #next.show #nextArrows span:nth-child(3) { animation-delay: .4s; }
+  @keyframes chevPulse {
+    0%, 60%, 100% { opacity: 0.25; }
+    20% { opacity: 1; }
+  }
+  /* "Up Next" banner: unfolds at the bottom edge of the card */
+  #next {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 -16px -12px;
+    padding: 0 16px;
+    max-height: 0;
+    opacity: 0;
+    transform: translateY(8px);
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.07);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    transition: max-height .45s cubic-bezier(.2,.8,.2,1), padding .45s cubic-bezier(.2,.8,.2,1),
+      opacity .4s ease, transform .45s cubic-bezier(.2,.8,.2,1);
+  }
+  #next.show {
+    max-height: 64px;
+    padding: 9px 16px;
+    margin-top: 10px;
+    opacity: 1;
+    transform: none;
+  }
+  #next.show #nextCover { animation: nextCoverIn .55s .1s cubic-bezier(.34,1.56,.64,1) both; }
+  #next.show #nextMeta { animation: nextMetaIn .45s .18s cubic-bezier(.34,1.56,.64,1) both; }
+  #next.show::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.15) 50%, transparent 70%);
+    transform: translateX(-100%);
+    animation: sweep .8s .3s ease-out both;
+    pointer-events: none;
+  }
+  @keyframes nextCoverIn {
+    from { transform: rotate(-16deg) scale(0.5); opacity: 0; }
+    to { transform: none; opacity: 1; }
+  }
+  @keyframes nextMetaIn {
+    from { transform: translateX(18px); opacity: 0; }
+    to { transform: none; opacity: 1; }
+  }
+  /* the banner entrance follows the chosen track-change animation */
+  #widget.anim-fade #next.show #nextCover { animation: nextFadeIn .5s .1s ease-out both; }
+  #widget.anim-fade #next.show #nextMeta { animation: nextFadeIn .5s .18s ease-out both; }
+  #widget.anim-fade #next.show::after { animation: none; }
+  @keyframes nextFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  #widget.anim-board #next.show #nextCover,
+  #widget.anim-board #next.show #nextMeta {
+    transform-origin: 50% 0;
+    animation: nextBoardIn .45s .08s cubic-bezier(.34,1.56,.64,1) both;
+  }
+  #widget.anim-board #next.show #nextMeta { animation-delay: .16s; }
+  @keyframes nextBoardIn {
+    from { transform: perspective(400px) rotateX(72deg); opacity: 0; }
+    to { transform: none; opacity: 1; }
+  }
+
+  #widget.anim-drop #next.show #nextCover { animation: nextDropIn .45s .06s cubic-bezier(.34,1.56,.64,1) both; }
+  #widget.anim-drop #next.show #nextMeta { animation: nextDropIn .45s .14s cubic-bezier(.34,1.56,.64,1) both; }
+  @keyframes nextDropIn {
+    from { transform: translateY(-14px); opacity: 0; }
+    to { transform: none; opacity: 1; }
+  }
+
+  #widget.anim-spin #next.show #nextCover { animation: nextSpinIn .6s .08s cubic-bezier(.16,.84,.3,1) both; }
+  @keyframes nextSpinIn {
+    from { transform: rotate(220deg) scale(0.4); opacity: 0; }
+    to { transform: none; opacity: 1; }
+  }
+
+  #widget.anim-glitch #next.show #nextCover,
+  #widget.anim-glitch #next.show #nextMeta { animation: nextGlitchIn .3s .08s steps(3, end) both; }
+  #widget.anim-glitch #next.show::after { animation: none; }
+  @keyframes nextGlitchIn {
+    0% { opacity: 0; transform: translate(-3px, 1px); filter: hue-rotate(70deg) saturate(2); }
+    50% { opacity: 1; transform: translate(2px, -1px); filter: hue-rotate(-50deg); }
+    100% { opacity: 1; transform: none; filter: none; }
+  }
+
+  #widget.anim-arrows #next.show #nextCover { animation: nextArrowIn .45s .08s cubic-bezier(.34,1.56,.64,1) both; }
+  #widget.anim-arrows #next.show #nextMeta { animation: nextArrowIn .45s .16s cubic-bezier(.34,1.56,.64,1) both; }
+  @keyframes nextArrowIn {
+    from { transform: translateX(-16px); opacity: 0; }
+    to { transform: none; opacity: 1; }
+  }
+  /* countdown to the end of the song, fills while the banner is visible */
+  #nextBar {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 2px;
+    width: 0;
+    background: linear-gradient(90deg, var(--accent), var(--accent2, var(--accent)));
+  }
+  #nextCover {
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+  #nextCover:not([src]) { display: none; }
+  #nextMeta { min-width: 0; }
+  #nextLabel {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  #nextLabel:empty { display: none; }
+  #nextTitle {
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0.9;
+  }
+  /* compact mode: title and artist on one line, everything tighter */
+  #widget.compact #inner { padding: 10px 12px 8px; }
+  #widget.compact #label { font-size: 10px; margin-bottom: 5px; }
+  #widget.compact #row { gap: 10px; }
+  #widget.compact #cover { width: 44px; height: 44px; }
+  #widget.compact #meta { display: flex; align-items: baseline; gap: 6px; }
+  #widget.compact #title { font-size: 14px; flex: 0 1 auto; }
+  #widget.compact #artist { font-size: 12px; margin-top: 0; flex-shrink: 0; max-width: 45%; }
+  #widget.compact #wave { height: 20px; margin-top: 6px; }
+  #widget.compact #times { font-size: 10px; }
+  #widget.compact #next { margin: 0 -12px -8px; padding: 0 12px; }
+  #widget.compact #next.show { max-height: 48px; margin-top: 8px; padding: 7px 12px; }
+  #widget.compact #nextCover { width: 24px; height: 24px; }
+  #widget.compact #nextLabel { font-size: 8px; }
+  #widget.compact #nextTitle { font-size: 11px; }
+</style>
+</head>
+<body>
+<div id="widget">
+  <div id="backdrop"></div>
+  <div id="sweep"></div>
+  <div id="arrows"><span>❯</span><span>❯</span><span>❯</span></div>
+  <div id="inner">
+    <div id="label"></div>
+    <div id="row">
+      <img id="cover" alt="">
+      <div id="meta">
+        <div id="title"></div>
+        <div id="artist"></div>
+      </div>
+    </div>
+    <canvas id="wave"></canvas>
+    <div id="times"><span id="tCur">0:00</span><span id="tTot">0:00</span></div>
+    <div id="next">
+      <span id="nextArrows"><span>❯</span><span>❯</span><span>❯</span></span>
+      <img id="nextCover" alt="">
+      <div id="nextMeta">
+        <div id="nextLabel"></div>
+        <div id="nextTitle"></div>
+      </div>
+      <div id="nextBar"></div>
+    </div>
+  </div>
+</div>
+<script>
+const params = new URLSearchParams(location.search);
+const cfg = {
+  radius: params.get("r") ?? "16",
+  label: params.has("label") ? params.get("label") : "Currently Playing",
+  cover: params.get("cover") ?? "left",     // left | backdrop | both | none
+  font: params.get("font") ?? "system",
+  width: params.get("w") ?? "420",
+  anim: params.get("anim") !== "0",         // animate track changes
+  next: parseInt(params.get("next") ?? "0", 10) || 0,  // seconds before end of song, 0 = off
+  nextlabel: params.has("nextlabel") ? params.get("nextlabel") : "Als Nächstes",
+  compact: params.get("compact") === "1",
+  bg: /^[0-9a-f]{6}$/i.test(params.get("bg") ?? "") ? params.get("bg") : "101216",
+  bgo: Math.min(100, Math.max(0, parseInt(params.get("bgo") ?? "82", 10) || 0)),
+  style: ["line", "static", "comet", "liquid", "wave"].includes(params.get("style"))
+    ? params.get("style") : "line",
+  animstyle: ["slide", "fade", "board", "drop", "spin", "glitch", "arrows"].includes(params.get("animstyle"))
+    ? params.get("animstyle") : "slide",
+};
+const demoMode = params.get("demo") === "1";
+
+const GOOGLE_FONTS = {
+  "inter": "Inter",
+  "outfit": "Outfit",
+  "sora": "Sora",
+  "space-grotesk": "Space Grotesk",
+  "jetbrains-mono": "JetBrains Mono",
+};
+
+let lightBg = false;
+
+function applyConfig() {
+  const root = document.documentElement.style;
+  root.setProperty("--radius", cfg.radius + "px");
+  root.setProperty("--w", cfg.width + "px");
+
+  const r = parseInt(cfg.bg.slice(0, 2), 16);
+  const g = parseInt(cfg.bg.slice(2, 4), 16);
+  const b = parseInt(cfg.bg.slice(4, 6), 16);
+  root.setProperty("--card-bg", `rgba(${r}, ${g}, ${b}, ${cfg.bgo / 100})`);
+  // only flip at noticeable opacity; when nearly transparent, light text reads better
+  lightBg = 0.2126 * r + 0.7152 * g + 0.0722 * b > 150 && cfg.bgo > 45;
+
+  if (cfg.font !== "system") {
+    const gf = GOOGLE_FONTS[cfg.font];
+    let family = cfg.font;
+    if (gf) {
+      family = gf;
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = "https://fonts.googleapis.com/css2?family=" + gf.replace(/ /g, "+") + ":wght@400;600;700&display=swap";
+      document.head.appendChild(link);
+    }
+    root.setProperty("--font", `"${family}", system-ui, sans-serif`);
+  }
+
+  document.getElementById("label").textContent = cfg.label ?? "";
+  document.getElementById("nextLabel").textContent = cfg.nextlabel;
+  const w = document.getElementById("widget");
+  w.classList.toggle("has-cover", cfg.cover === "left" || cfg.cover === "both");
+  w.classList.toggle("has-backdrop", cfg.cover === "backdrop" || cfg.cover === "both");
+  w.classList.toggle("compact", cfg.compact);
+  for (const s of ["slide", "fade", "board", "drop", "spin", "glitch", "arrows"]) {
+    w.classList.remove("anim-" + s);
+  }
+  if (cfg.anim) w.classList.add("anim-" + cfg.animstyle);
+  const hasBackdrop = cfg.cover === "backdrop" || cfg.cover === "both";
+  if (hasBackdrop) lightBg = false;
+  w.classList.toggle("light", lightBg);
+
+  // canvas height depends on the style, liquid and lines need less than the waveform
+  const H = { wave: [34, 20], line: [26, 16], static: [22, 14], comet: [26, 16], liquid: [20, 14] };
+  document.getElementById("wave").style.height = H[cfg.style][cfg.compact ? 1 : 0] + "px";
+}
+applyConfig();
+
+const el = {
+  widget: document.getElementById("widget"),
+  backdrop: document.getElementById("backdrop"),
+  inner: document.getElementById("inner"),
+  cover: document.getElementById("cover"),
+  title: document.getElementById("title"),
+  artist: document.getElementById("artist"),
+  wave: document.getElementById("wave"),
+  tCur: document.getElementById("tCur"),
+  tTot: document.getElementById("tTot"),
+  next: document.getElementById("next"),
+  nextCover: document.getElementById("nextCover"),
+  nextTitle: document.getElementById("nextTitle"),
+  nextBar: document.getElementById("nextBar"),
+};
+
+let state = null;          // last playback data + timestamp
+let trackId = null;
+let bars = [];
+let accent = [110, 231, 183];
+let nextFetchedFor = null; // track ID the banner was already fetched for
+
+// deterministic waveform per track so it doesn't jump between polls
+function seededBars(id, n) {
+  let h = 2166136261;
+  for (const ch of id) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
+  const rand = () => {
+    h ^= h << 13; h ^= h >>> 17; h ^= h << 5;
+    return ((h >>> 0) / 4294967296);
+  };
+  const raw = Array.from({ length: n }, () => 0.25 + rand() * 0.75);
+  // smooth slightly, otherwise it reads as noise instead of music
+  return raw.map((v, i) => {
+    const prev = raw[i - 1] ?? v, next = raw[i + 1] ?? v;
+    return (prev + v * 2 + next) / 4;
+  });
+}
+
+function luminanceOk(r, g, b) {
+  const l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return l > 40 && l < 235;
+}
+
+let accent2 = [150, 200, 235]; // second gradient color
+
+function rgbToHsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) return [0, 0, l];
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h;
+  if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+  else if (max === g) h = ((b - r) / d + 2) / 6;
+  else h = ((r - g) / d + 4) / 6;
+  return [h, s, l];
+}
+
+function hslToRgb(h, s, l) {
+  h = ((h % 1) + 1) % 1;
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  const f = (t) => {
+    t = ((t % 1) + 1) % 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  };
+  return [f(h + 1 / 3) * 255, f(h) * 255, f(h - 1 / 3) * 255];
+}
+
+// lift dark colors, otherwise the gradient drowns in the widget background
+function liftColor([r, g, b]) {
+  const l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  if (l < 120) {
+    const f = 140 / Math.max(l, 1);
+    return [Math.min(255, r * f), Math.min(255, g * f), Math.min(255, b * f)];
+  }
+  return [r, g, b];
+}
+
+async function extractAccent(coverUrl) {
+  try {
+    const img = new Image();
+    img.src = "/api/cover?url=" + encodeURIComponent(coverUrl);
+    await img.decode();
+    const s = 40;
+    const c = document.createElement("canvas");
+    c.width = c.height = s;
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0, s, s);
+    const d = ctx.getImageData(0, 0, s, s).data;
+    // hue buckets weighted by saturation: the two strongest, sufficiently
+    // different colors become the gradient ends
+    const buckets = Array.from({ length: 12 }, (_, idx) => ({ idx, w: 0, r: 0, g: 0, b: 0 }));
+    for (let i = 0; i < d.length; i += 4) {
+      const r = d[i], g = d[i + 1], b = d[i + 2];
+      if (!luminanceOk(r, g, b)) continue;
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      const sat = max === 0 ? 0 : (max - min) / max;
+      if (sat < 0.15) continue;
+      let hue = 0;
+      if (max === r) hue = ((g - b) / (max - min)) % 6;
+      else if (max === g) hue = (b - r) / (max - min) + 2;
+      else hue = (r - g) / (max - min) + 4;
+      const idx = ((Math.round(hue * 2) % 12) + 12) % 12;
+      const wgt = sat * sat;
+      buckets[idx].w += wgt;
+      buckets[idx].r += r * wgt; buckets[idx].g += g * wgt; buckets[idx].b += b * wgt;
+    }
+    const sorted = buckets.filter((b) => b.w > 0).sort((a, b) => b.w - a.w);
+    if (!sorted.length) {
+      accent = [200, 200, 200];
+      accent2 = [235, 235, 235];
+      setAccentVar();
+      return;
+    }
+    const avg = (b) => [b.r / b.w, b.g / b.w, b.b / b.w];
+    accent = liftColor(avg(sorted[0]));
+    const hueDist = (a, b) => Math.min(Math.abs(a - b), 12 - Math.abs(a - b));
+    const second = sorted.slice(1).find(
+      (b) => hueDist(b.idx, sorted[0].idx) >= 2 && b.w >= sorted[0].w * 0.18
+    );
+    if (second) {
+      accent2 = liftColor(avg(second));
+    } else {
+      // single-color cover: derive the second color from the first (hue shifted, lighter)
+      const [h, sat, l] = rgbToHsl(...accent);
+      accent2 = hslToRgb(h + 0.12, Math.min(1, sat), Math.min(0.75, Math.max(0.6, l + 0.12)));
+    }
+    setAccentVar();
+  } catch {
+    accent = [200, 200, 200];
+    accent2 = [235, 235, 235];
+    setAccentVar();
+  }
+}
+
+function setAccentVar() {
+  const root = document.documentElement.style;
+  root.setProperty("--accent", `rgb(${accent[0] | 0}, ${accent[1] | 0}, ${accent[2] | 0})`);
+  root.setProperty("--accent2", `rgb(${accent2[0] | 0}, ${accent2[1] | 0}, ${accent2[2] | 0})`);
+}
+setAccentVar();
+
+function coverSrc(cover) {
+  if (!cover) return null;
+  return cover.startsWith("data:") ? cover : "/api/cover?url=" + encodeURIComponent(cover);
+}
+
+let seedPhase = 0;
+
+let introStart = 0;
+
+function applyTrackVisuals(data, fixedAccent) {
+  trackId = data.id;
+  introStart = performance.now();
+  el.title.textContent = data.title;
+  el.artist.textContent = data.artists;
+  bars = seededBars(data.id, cfg.compact ? 42 : 56);
+  seedPhase = bars[0] * 19.7; // different wave phase per track
+  const src = coverSrc(data.cover);
+  if (src) {
+    el.cover.src = src;
+    el.backdrop.style.backgroundImage = `url("${src}")`;
+  } else {
+    el.cover.removeAttribute("src");
+    el.backdrop.style.backgroundImage = "none";
+  }
+  if (fixedAccent) {
+    [accent, accent2] = fixedAccent;
+    setAccentVar();
+  } else if (data.cover) {
+    extractAccent(data.cover);
+  } else {
+    accent = [200, 200, 200];
+    accent2 = [235, 235, 235];
+    setAccentVar();
+  }
+}
+
+const overshoot = "cubic-bezier(.34,1.56,.64,1)";
+
+function sweepCard() {
+  // light streak across the card, CSS animation retriggered via class toggle
+  el.widget.classList.remove("sweeping");
+  void el.widget.offsetWidth;
+  el.widget.classList.add("sweeping");
+}
+
+async function animOut(list) {
+  const anims = list.map(([elm, kf, opts]) => elm.animate(kf, { fill: "forwards", ...opts }));
+  await Promise.all(anims.map((a) => a.finished));
+  return anims;
+}
+
+// each entry: staggered out -> swap visuals -> characterful in.
+// cancel() clears the forwards fills; the in-animations start in the same frame.
+const ANIMS = {
+  async slide(data, fixedAccent) {
+    const o = { duration: 170, easing: "ease-in" };
+    const outs = await animOut([
+      [el.title, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateX(-16px)" }], o],
+      [el.artist, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateX(-12px)" }], { ...o, delay: 30 }],
+      [el.cover, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "scale(0.85)" }], o],
+    ]);
+    applyTrackVisuals(data, fixedAccent);
+    outs.forEach((a) => a.cancel());
+    sweepCard();
+    el.cover.animate(
+      [{ opacity: 0, transform: "perspective(500px) rotateY(75deg) scale(0.8)" },
+       { opacity: 1, transform: "perspective(500px) rotateY(0deg) scale(1)" }],
+      { duration: 480, easing: overshoot });
+    el.title.animate(
+      [{ opacity: 0, transform: "translateX(22px)" }, { opacity: 1, transform: "none" }],
+      { duration: 400, easing: overshoot });
+    el.artist.animate(
+      [{ opacity: 0, transform: "translateX(22px)" }, { opacity: 1, transform: "none" }],
+      { duration: 400, delay: 80, easing: overshoot, fill: "backwards" });
+  },
+
+  async fade(data, fixedAccent) {
+    const outs = await animOut([
+      [el.inner, [{ opacity: 1 }, { opacity: 0 }], { duration: 220, easing: "ease-in" }],
+    ]);
+    applyTrackVisuals(data, fixedAccent);
+    outs.forEach((a) => a.cancel());
+    el.inner.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 400, easing: "ease-out" });
+    el.cover.animate([{ transform: "scale(1.06)" }, { transform: "scale(1)" }], { duration: 650, easing: "ease-out" });
+  },
+
+  async board(data, fixedAccent) {
+    el.inner.style.transformOrigin = "50% 0%";
+    const outs = await animOut([
+      [el.inner,
+       [{ opacity: 1, transform: "perspective(600px) rotateX(0deg)" },
+        { opacity: 0.3, transform: "perspective(600px) rotateX(-84deg)" }],
+       { duration: 230, easing: "ease-in" }],
+    ]);
+    applyTrackVisuals(data, fixedAccent);
+    outs.forEach((a) => a.cancel());
+    el.inner.animate(
+      [{ opacity: 0, transform: "perspective(600px) rotateX(72deg)" },
+       { opacity: 1, transform: "perspective(600px) rotateX(0deg)" }],
+      { duration: 420, easing: overshoot });
+  },
+
+  async drop(data, fixedAccent) {
+    const o = { duration: 190, easing: "ease-in" };
+    const outs = await animOut([
+      [el.cover, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(24px) rotate(-6deg)" }], o],
+      [el.title, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(20px) rotate(2deg)" }], { ...o, delay: 25 }],
+      [el.artist, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(18px)" }], { ...o, delay: 50 }],
+    ]);
+    applyTrackVisuals(data, fixedAccent);
+    outs.forEach((a) => a.cancel());
+    const drop = [{ opacity: 0, transform: "translateY(-26px)" }, { opacity: 1, transform: "none" }];
+    el.cover.animate(drop, { duration: 450, easing: overshoot });
+    el.title.animate(drop, { duration: 420, delay: 60, easing: overshoot, fill: "backwards" });
+    el.artist.animate(drop, { duration: 420, delay: 120, easing: overshoot, fill: "backwards" });
+  },
+
+  async spin(data, fixedAccent) {
+    const o = { duration: 210, easing: "ease-in" };
+    const outs = await animOut([
+      [el.cover, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "rotate(-100deg) scale(0.6)" }], o],
+      [el.title, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateX(-14px)" }], o],
+      [el.artist, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateX(-10px)" }], { ...o, delay: 30 }],
+    ]);
+    applyTrackVisuals(data, fixedAccent);
+    outs.forEach((a) => a.cancel());
+    // spins up like a record being dropped on the platter
+    el.cover.animate(
+      [{ opacity: 0, transform: "rotate(260deg) scale(0.55)" }, { opacity: 1, transform: "rotate(0deg) scale(1)" }],
+      { duration: 650, easing: "cubic-bezier(.16,.84,.3,1)" });
+    el.title.animate(
+      [{ opacity: 0, transform: "translateX(20px)" }, { opacity: 1, transform: "none" }],
+      { duration: 420, delay: 120, easing: overshoot, fill: "backwards" });
+    el.artist.animate(
+      [{ opacity: 0, transform: "translateX(20px)" }, { opacity: 1, transform: "none" }],
+      { duration: 420, delay: 190, easing: overshoot, fill: "backwards" });
+  },
+
+  async arrows(data, fixedAccent) {
+    const o = { duration: 180, easing: "ease-in" };
+    const outs = await animOut([
+      [el.cover, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateX(22px)" }], o],
+      [el.title, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateX(28px)" }], { ...o, delay: 25 }],
+      [el.artist, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateX(24px)" }], { ...o, delay: 50 }],
+    ]);
+    applyTrackVisuals(data, fixedAccent);
+    outs.forEach((a) => a.cancel());
+    // chevrons fly across, CSS animation retriggered via class toggle
+    el.widget.classList.remove("arrowing");
+    void el.widget.offsetWidth;
+    el.widget.classList.add("arrowing");
+    const from = [{ opacity: 0, transform: "translateX(-28px)" }, { opacity: 1, transform: "none" }];
+    el.cover.animate(from, { duration: 420, delay: 120, easing: overshoot, fill: "backwards" });
+    el.title.animate(from, { duration: 420, delay: 180, easing: overshoot, fill: "backwards" });
+    el.artist.animate(from, { duration: 420, delay: 240, easing: overshoot, fill: "backwards" });
+  },
+
+  async glitch(data, fixedAccent) {
+    const outs = await animOut([
+      [el.inner,
+       [{ transform: "translate(0, 0)", opacity: 1, filter: "none" },
+        { transform: "translate(-4px, 2px)", opacity: 1, filter: "hue-rotate(80deg) saturate(2.5)" },
+        { transform: "translate(4px, -2px)", opacity: 1, filter: "hue-rotate(-70deg)" },
+        { transform: "translate(-2px, 0)", opacity: 0, filter: "none" }],
+       { duration: 170, easing: "steps(3, end)" }],
+    ]);
+    applyTrackVisuals(data, fixedAccent);
+    outs.forEach((a) => a.cancel());
+    el.inner.animate(
+      [{ transform: "translate(3px, -2px)", opacity: 0, filter: "hue-rotate(60deg) saturate(2.5)" },
+       { transform: "translate(-3px, 2px)", opacity: 1, filter: "hue-rotate(-50deg)" },
+       { transform: "translate(2px, 1px)", opacity: 1, filter: "none" },
+       { transform: "none", opacity: 1, filter: "none" }],
+      { duration: 240, easing: "steps(4, end)" });
+    el.title.animate(
+      [{ textShadow: "2px 0 rgba(255, 0, 90, 0.8), -2px 0 rgba(0, 255, 255, 0.8)" },
+       { textShadow: "none" }],
+      { duration: 300, easing: "steps(3, end)" });
+  },
+};
+
+let switching = false;
+async function switchTrack(data, fixedAccent) {
+  const animate = cfg.anim && trackId !== null && !switching;
+  el.next.classList.remove("show");
+  if (!animate) {
+    applyTrackVisuals(data, fixedAccent);
+    return;
+  }
+  switching = true;
+  try {
+    await ANIMS[cfg.animstyle](data, fixedAccent);
+  } finally {
+    switching = false;
+  }
+}
+
+function showNext(d) {
+  el.nextBar.style.width = "0%";
+  el.nextTitle.textContent = d.title + " – " + d.artists;
+  const src = coverSrc(d.cover);
+  if (src) el.nextCover.src = src;
+  else el.nextCover.removeAttribute("src");
+  el.next.classList.add("show");
+}
+
+function updateNext() {
+  if (!cfg.next || !state || !state.duration_ms) return;
+  const remaining = state.duration_ms - currentProgress();
+  const inWindow = state.playing && remaining <= cfg.next * 1000 && remaining > 800;
+  if (inWindow && nextFetchedFor !== trackId) {
+    nextFetchedFor = trackId;
+    if (demoMode) {
+      showNext(demoNext());
+    } else {
+      fetch("/api/next")
+        .then((r) => r.json())
+        .then((d) => {
+          // only show if the track hasn't changed in the meantime
+          if (d.title && nextFetchedFor === trackId) showNext(d);
+        })
+        .catch(() => {});
+    }
+  }
+  if (!inWindow) {
+    el.next.classList.remove("show");
+    // e.g. after seeking back: may appear again on the next window entry
+    if (nextFetchedFor === trackId) nextFetchedFor = null;
+  } else if (el.next.classList.contains("show")) {
+    // strip fills up until the song ends
+    const f = Math.max(0, Math.min(1, 1 - remaining / (cfg.next * 1000)));
+    el.nextBar.style.width = (f * 100).toFixed(1) + "%";
+  }
+}
+
+function fmt(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+}
+
+function currentProgress() {
+  if (!state) return 0;
+  let p = state.progress_ms;
+  if (state.playing) p += performance.now() - state.at;
+  return Math.min(p, state.duration_ms);
+}
+
+function rgba(c, a) {
+  return `rgba(${c[0] | 0}, ${c[1] | 0}, ${c[2] | 0}, ${a})`;
+}
+
+function dot(ctx, x, y, r) {
+  ctx.save();
+  ctx.shadowColor = rgba(accent2, 1);
+  ctx.shadowBlur = 10;
+  ctx.fillStyle = lightBg ? "#16181d" : "#fff";
+  ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+  ctx.restore();
+}
+
+function drawProgress(flowT) {
+  const canvas = el.wave;
+  const dpr = window.devicePixelRatio || 1;
+  const cw = canvas.clientWidth, ch = canvas.clientHeight;
+  if (!cw) return;
+  if (canvas.width !== cw * dpr || canvas.height !== ch * dpr) {
+    canvas.width = cw * dpr; canvas.height = ch * dpr;
+  }
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cw, ch);
+  if (!state) return;
+
+  const frac = state.duration_ms ? currentProgress() / state.duration_ms : 0;
+  const px = frac * cw;
+  const mid = ch / 2;
+  const dim = lightBg ? "rgba(0, 0, 0, 0.2)" : "rgba(255, 255, 255, 0.25)";
+  const grad = ctx.createLinearGradient(0, 0, cw, 0);
+  grad.addColorStop(0, rgba(accent, 1));
+  grad.addColorStop(1, rgba(accent2, 1));
+  ctx.lineCap = "round";
+
+  // after a track change the display builds up from the left
+  const intro = Math.min(1, (performance.now() - introStart) / 500);
+  const clipped = intro < 1;
+  if (clipped) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, cw * (1 - Math.pow(1 - intro, 3)), ch);
+    ctx.clip();
+  }
+
+  if (cfg.style === "line") {
+    // future part: straight line
+    ctx.strokeStyle = dim; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(px, mid); ctx.lineTo(cw, mid); ctx.stroke();
+    // played part: longer ripples with fewer peaks; amplitude follows the
+    // track's seeded profile, so quiet stretches stay nearly flat and louder
+    // ones swing more (rough song dynamics, no real audio data available)
+    const env = (x) => {
+      if (!bars.length) return 0.7;
+      const p = (x / cw) * (bars.length - 1);
+      const i = Math.floor(p), f = p - i;
+      const a = bars[i] ?? 0.6, b = bars[i + 1] ?? a;
+      return a + (b - a) * f;
+    };
+    ctx.strokeStyle = grad; ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    for (let x = 0; x <= px; x += 2) {
+      const taper = Math.min(1, (px - x) / 18);
+      const y = mid + Math.sin(x * 0.16 - flowT * 0.003 + seedPhase) * ch * 0.17 * env(x) * taper;
+      x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.lineTo(px, mid);
+    ctx.stroke();
+    dot(ctx, px, mid, 3.5);
+
+  } else if (cfg.style === "static") {
+    ctx.strokeStyle = dim; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(cw, mid); ctx.stroke();
+    ctx.strokeStyle = grad;
+    ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(Math.max(1, px), mid); ctx.stroke();
+    dot(ctx, px, mid, 3.5);
+
+  } else if (cfg.style === "comet") {
+    ctx.strokeStyle = dim; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(cw, mid); ctx.stroke();
+    const tail = Math.min(px, 110);
+    if (tail > 2) {
+      const gl = ctx.createLinearGradient(px - tail, 0, px, 0);
+      gl.addColorStop(0, rgba(accent, 0));
+      gl.addColorStop(0.55, rgba(accent, 0.9));
+      gl.addColorStop(1, rgba(accent2, 1));
+      ctx.strokeStyle = gl; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(px - tail, mid); ctx.lineTo(px, mid); ctx.stroke();
+      // particles drifting in the tail, frozen while paused
+      for (let i = 0; i < 6; i++) {
+        const tx = px - ((i * 19 + flowT * 0.012) % tail);
+        const fade = Math.max(0, 1 - (px - tx) / tail);
+        if (fade <= 0) continue;
+        ctx.fillStyle = rgba(accent2, 0.5 * fade);
+        ctx.beginPath();
+        ctx.arc(tx, mid + Math.sin(tx * 0.12 + i * 2) * ch * 0.14 * fade, 1.8 * fade + 0.5, 0, 7);
+        ctx.fill();
+      }
+    }
+    const pulse = state.playing ? Math.sin(flowT * 0.008) * 0.8 : 0;
+    dot(ctx, px, mid, 4 + pulse);
+
+  } else if (cfg.style === "liquid") {
+    const rr = ch / 2;
+    const lpx = Math.max(rr, px);
+    ctx.fillStyle = lightBg ? "rgba(0, 0, 0, 0.12)" : "rgba(255, 255, 255, 0.12)";
+    ctx.beginPath(); ctx.roundRect(0, 0, cw, ch, rr); ctx.fill();
+    ctx.save();
+    ctx.beginPath(); ctx.roundRect(0, 0, cw, ch, rr); ctx.clip();
+    const edge = (y) => lpx + Math.sin(y * 0.16 + flowT * 0.0025) * 2.5 + Math.sin(y * 0.34 - flowT * 0.0014) * 1.2;
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    for (let y = 0; y <= ch; y += 2) ctx.lineTo(edge(y), y);
+    ctx.lineTo(0, ch);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = lightBg ? "rgba(0, 0, 0, 0.35)" : "rgba(255, 255, 255, 0.5)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let y = 0; y <= ch; y += 2) { const x = edge(y); y === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
+    ctx.stroke();
+    ctx.restore();
+
+  } else {
+    // wave: the original bar waveform
+    const n = bars.length;
+    if (!n) { if (clipped) ctx.restore(); return; }
+    const gap = 2;
+    const bw = (cw - gap * (n - 1)) / n;
+    const playhead = frac * n;
+    for (let i = 0; i < n; i++) {
+      const base = (bars[i] - 0.6) * 0.4;
+      const wave1 = Math.sin(i * 0.52 - flowT * 0.0014 + seedPhase) * 0.2;
+      const wave2 = Math.sin(i * 1.31 + flowT * 0.0008 + seedPhase * 2.3) * 0.08;
+      const near = Math.max(0, 1 - Math.abs(i - playhead) / 6);
+      const pulse = state.playing ? near * Math.sin(flowT / 110 + i) * 0.1 : 0;
+      const h = Math.max(0.1, Math.min(1, 0.55 + base + wave1 + wave2 + pulse));
+      const bh = h * ch;
+      const x = i * (bw + gap);
+      ctx.fillStyle = i + 0.5 <= playhead ? grad : dim;
+      ctx.beginPath();
+      ctx.roundRect(x, (ch - bh) / 2, bw, bh, bw / 2);
+      ctx.fill();
+    }
+  }
+  if (clipped) ctx.restore();
+}
+
+let flowT = 0, lastFrame = 0;
+function loop(t) {
+  // only advance the flow while playing
+  const dt = lastFrame ? t - lastFrame : 0;
+  lastFrame = t;
+  if (state && state.playing) flowT += dt;
+  drawProgress(flowT);
+  if (state) {
+    el.tCur.textContent = fmt(currentProgress());
+    el.tTot.textContent = fmt(state.duration_ms);
+  }
+  updateNext();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// ---- demo mode for the preview on the config page (?demo=1) ----
+function demoCoverSvg(c1, c2) {
+  return "data:image/svg+xml," + encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300">
+      <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/>
+      </linearGradient></defs>
+      <rect width="300" height="300" fill="url(#g)"/>
+      <circle cx="150" cy="150" r="60" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="10"/>
+      <circle cx="150" cy="150" r="12" fill="rgba(255,255,255,0.5)"/>
+    </svg>`
+  );
+}
+
+const demoTracks = [
+  { id: "demo1", title: "Midnight City", artists: "M83", cover: demoCoverSvg("#7c3aed", "#db2777"), accent: [[200, 130, 255], [255, 130, 190]] },
+  { id: "demo2", title: "Little Dark Age", artists: "MGMT", cover: demoCoverSvg("#0e7490", "#22d3ee"), accent: [[90, 200, 235], [130, 235, 190]] },
+];
+let demoIdx = 0;
+
+function demoNext() {
+  return demoTracks[(demoIdx + 1) % demoTracks.length];
+}
+
+if (demoMode) {
+  // keep demo songs short so banner and switch animation show up without waiting
+  const demoDur = cfg.next ? Math.max(16000, cfg.next * 1000 + 6000) : 16000;
+  const startDemoTrack = () => {
+    const t = demoTracks[demoIdx];
+    switchTrack({ ...t }, t.accent);
+    state = { playing: true, progress_ms: 0, duration_ms: demoDur, at: performance.now() };
+  };
+  startDemoTrack();
+  el.widget.classList.add("visible");
+  setInterval(() => {
+    if (currentProgress() >= demoDur - 100) {
+      demoIdx = (demoIdx + 1) % demoTracks.length;
+      startDemoTrack();
+    }
+  }, 250);
+} else {
+  async function poll() {
+    try {
+      const res = await fetch("/api/now-playing");
+      const data = await res.json();
+      if (!data.title) {
+        state = null;
+        el.widget.classList.remove("visible");
+        return;
+      }
+      state = { ...data, at: performance.now() };
+      el.widget.classList.add("visible");
+      if (data.id !== trackId) switchTrack(data);
+    } catch {
+      // server briefly gone: keep the widget as is, next poll retries
+    }
+  }
+  // adaptive interval: 1.2s baseline keeps skips snappy, near the end of a
+  // song polls get even tighter so the natural switch shows up almost instantly
+  function nextPollDelay() {
+    if (!state) return 3000;
+    if (!state.playing) return 2000;
+    const remaining = state.duration_ms - currentProgress();
+    if (remaining < 2500) return Math.max(400, remaining - 600);
+    if (remaining < 12000) return 800;
+    return 1200;
+  }
+  async function pollLoop() {
+    await poll();
+    setTimeout(pollLoop, nextPollDelay());
+  }
+  pollLoop();
+}
+</script>
+</body>
+</html>

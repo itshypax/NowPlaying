@@ -1,0 +1,32 @@
+name: Release builds
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - name: Build standalone binaries
+        run: |
+          set -e
+          for target in windows-x64 linux-x64 darwin-x64 darwin-arm64; do
+            dir="dist/nowplaying-$target"
+            mkdir -p "$dir"
+            out="$dir/nowplaying"
+            if [ "$target" = "windows-x64" ]; then out="$out.exe"; fi
+            bun build --compile --target="bun-$target" server.ts --outfile "$out"
+            cp -r public "$dir/"
+            cp README.md LICENSE "$dir/"
+            (cd dist && zip -qr "nowplaying-$target.zip" "nowplaying-$target")
+          done
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
