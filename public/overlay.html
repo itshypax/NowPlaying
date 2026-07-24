@@ -131,7 +131,7 @@
     pointer-events: none;
     display: none;
   }
-  #widget.anim-arrows #arrows { display: block; }
+  #stage.anim-arrows #arrows { display: block; }
   #arrows span {
     position: absolute;
     top: 50%;
@@ -160,7 +160,7 @@
     color: var(--accent);
     flex-shrink: 0;
   }
-  #widget.anim-arrows #nextArrows { display: inline-flex; }
+  #stage.anim-arrows #nextArrows { display: inline-flex; }
   #nextArrows span { opacity: 0.25; }
   #next.show #nextArrows span { animation: chevPulse 1.2s infinite; }
   #next.show #nextArrows span:nth-child(2) { animation-delay: .2s; }
@@ -213,46 +213,46 @@
     to { transform: none; opacity: 1; }
   }
   /* the banner entrance follows the chosen track-change animation */
-  #widget.anim-fade #next.show #nextCover { animation: nextFadeIn .5s .1s ease-out both; }
-  #widget.anim-fade #next.show #nextMeta { animation: nextFadeIn .5s .18s ease-out both; }
-  #widget.anim-fade #next.show::after { animation: none; }
+  #stage.anim-fade #next.show #nextCover { animation: nextFadeIn .5s .1s ease-out both; }
+  #stage.anim-fade #next.show #nextMeta { animation: nextFadeIn .5s .18s ease-out both; }
+  #stage.anim-fade #next.show::after { animation: none; }
   @keyframes nextFadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-  #widget.anim-board #next.show #nextCover,
-  #widget.anim-board #next.show #nextMeta {
+  #stage.anim-board #next.show #nextCover,
+  #stage.anim-board #next.show #nextMeta {
     transform-origin: 50% 0;
     animation: nextBoardIn .45s .08s cubic-bezier(.34,1.56,.64,1) both;
   }
-  #widget.anim-board #next.show #nextMeta { animation-delay: .16s; }
+  #stage.anim-board #next.show #nextMeta { animation-delay: .16s; }
   @keyframes nextBoardIn {
     from { transform: perspective(400px) rotateX(72deg); opacity: 0; }
     to { transform: none; opacity: 1; }
   }
 
-  #widget.anim-drop #next.show #nextCover { animation: nextDropIn .45s .06s cubic-bezier(.34,1.56,.64,1) both; }
-  #widget.anim-drop #next.show #nextMeta { animation: nextDropIn .45s .14s cubic-bezier(.34,1.56,.64,1) both; }
+  #stage.anim-drop #next.show #nextCover { animation: nextDropIn .45s .06s cubic-bezier(.34,1.56,.64,1) both; }
+  #stage.anim-drop #next.show #nextMeta { animation: nextDropIn .45s .14s cubic-bezier(.34,1.56,.64,1) both; }
   @keyframes nextDropIn {
     from { transform: translateY(-14px); opacity: 0; }
     to { transform: none; opacity: 1; }
   }
 
-  #widget.anim-spin #next.show #nextCover { animation: nextSpinIn .6s .08s cubic-bezier(.16,.84,.3,1) both; }
+  #stage.anim-spin #next.show #nextCover { animation: nextSpinIn .6s .08s cubic-bezier(.16,.84,.3,1) both; }
   @keyframes nextSpinIn {
     from { transform: rotate(220deg) scale(0.4); opacity: 0; }
     to { transform: none; opacity: 1; }
   }
 
-  #widget.anim-glitch #next.show #nextCover,
-  #widget.anim-glitch #next.show #nextMeta { animation: nextGlitchIn .3s .08s steps(3, end) both; }
-  #widget.anim-glitch #next.show::after { animation: none; }
+  #stage.anim-glitch #next.show #nextCover,
+  #stage.anim-glitch #next.show #nextMeta { animation: nextGlitchIn .3s .08s steps(3, end) both; }
+  #stage.anim-glitch #next.show::after { animation: none; }
   @keyframes nextGlitchIn {
     0% { opacity: 0; transform: translate(-3px, 1px); filter: hue-rotate(70deg) saturate(2); }
     50% { opacity: 1; transform: translate(2px, -1px); filter: hue-rotate(-50deg); }
     100% { opacity: 1; transform: none; filter: none; }
   }
 
-  #widget.anim-arrows #next.show #nextCover { animation: nextArrowIn .45s .08s cubic-bezier(.34,1.56,.64,1) both; }
-  #widget.anim-arrows #next.show #nextMeta { animation: nextArrowIn .45s .16s cubic-bezier(.34,1.56,.64,1) both; }
+  #stage.anim-arrows #next.show #nextCover { animation: nextArrowIn .45s .08s cubic-bezier(.34,1.56,.64,1) both; }
+  #stage.anim-arrows #next.show #nextMeta { animation: nextArrowIn .45s .16s cubic-bezier(.34,1.56,.64,1) both; }
   @keyframes nextArrowIn {
     from { transform: translateX(-16px); opacity: 0; }
     to { transform: none; opacity: 1; }
@@ -266,6 +266,86 @@
     width: 0;
     background: linear-gradient(90deg, var(--accent), var(--accent2, var(--accent)));
   }
+  /* stage wraps widget + banner so the banner can sit outside the card */
+  #stage {
+    color: #fff;
+    font-family: var(--font);
+    width: max-content;
+  }
+  #stage.light { color: #16181d; }
+  #stage.next-left, #stage.next-right {
+    display: flex;
+    align-items: stretch;
+  }
+  #stage.next-left #next { order: -1; }
+  /* banner above the content instead of below */
+  #widget.next-top #next {
+    margin: 0 -16px 0;
+    transform: translateY(-8px);
+    border-top: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  #widget.next-top #next.show {
+    margin: -14px -16px 10px;
+    padding: 9px 16px;
+    transform: none;
+  }
+  #widget.compact.next-top #next { margin: 0 -12px 0; }
+  #widget.compact.next-top #next.show { margin: -10px -12px 8px; padding: 7px 12px; }
+  /* banner as a side panel matching the widget's height — the vertical
+     counterpart to the full-width strips at top/bottom. Space stays reserved
+     (only fades/slides in), so the widget never jumps. */
+  #stage.next-left #next, #stage.next-right #next {
+    position: relative;
+    flex-shrink: 0;
+    width: 168px;
+    max-height: none;
+    margin: 0;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 8px;
+    background: var(--card-bg, rgba(16, 18, 22, 0.82));
+    border: none;
+    border-radius: calc(var(--radius) * 0.8);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+    overflow: hidden;
+    opacity: 0;
+    transition: opacity .4s ease, transform .45s cubic-bezier(.2,.8,.2,1);
+  }
+  #stage.next-left #next { order: -1; margin-right: 10px; transform: translateX(16px) scale(0.96); }
+  #stage.next-right #next { margin-left: 10px; transform: translateX(-16px) scale(0.96); }
+  #stage.next-left #next.show, #stage.next-right #next.show {
+    max-height: none;
+    margin-top: 0;
+    padding: 12px;
+    opacity: 1;
+    transform: none;
+  }
+  #stage.next-left #nextCover, #stage.next-right #nextCover {
+    width: 52px;
+    height: 52px;
+    border-radius: 10px;
+  }
+  #stage.next-left #nextMeta, #stage.next-right #nextMeta { min-width: 0; max-width: 100%; }
+  #stage.next-left #nextTitle, #stage.next-right #nextTitle {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-height: 1.35;
+  }
+  #stage.next-left #nextArrows, #stage.next-right #nextArrows {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+  }
+  #stage.compact.next-left #next, #stage.compact.next-right #next { width: 138px; padding: 9px 10px; gap: 5px; }
+  #stage.compact.next-left #nextCover, #stage.compact.next-right #nextCover { width: 36px; height: 36px; border-radius: 8px; }
+  #stage.compact.next-left #nextTitle, #stage.compact.next-right #nextTitle { -webkit-line-clamp: 2; }
   #nextCover {
     width: 30px;
     height: 30px;
@@ -308,6 +388,7 @@
 </style>
 </head>
 <body>
+<div id="stage">
 <div id="widget">
   <div id="backdrop"></div>
   <div id="sweep"></div>
@@ -334,6 +415,7 @@
     </div>
   </div>
 </div>
+</div>
 <script>
 const params = new URLSearchParams(location.search);
 const cfg = {
@@ -352,6 +434,8 @@ const cfg = {
     ? params.get("style") : "line",
   animstyle: ["slide", "fade", "board", "drop", "spin", "glitch", "arrows"].includes(params.get("animstyle"))
     ? params.get("animstyle") : "slide",
+  nextpos: ["bottom", "top", "left", "right"].includes(params.get("nextpos"))
+    ? params.get("nextpos") : "bottom",
 };
 const demoMode = params.get("demo") === "1";
 
@@ -396,10 +480,28 @@ function applyConfig() {
   w.classList.toggle("has-cover", cfg.cover === "left" || cfg.cover === "both");
   w.classList.toggle("has-backdrop", cfg.cover === "backdrop" || cfg.cover === "both");
   w.classList.toggle("compact", cfg.compact);
+  // move the banner to its configured position; the animations key off the
+  // stage classes, so each position gets a fitting reveal direction
+  const stage = document.getElementById("stage");
+  stage.classList.toggle("compact", cfg.compact);
   for (const s of ["slide", "fade", "board", "drop", "spin", "glitch", "arrows"]) {
-    w.classList.remove("anim-" + s);
+    stage.classList.remove("anim-" + s);
   }
-  if (cfg.anim) w.classList.add("anim-" + cfg.animstyle);
+  if (cfg.anim) stage.classList.add("anim-" + cfg.animstyle);
+  const next = document.getElementById("next");
+  const inner = document.getElementById("inner");
+  stage.classList.remove("next-left", "next-right", "light");
+  w.classList.remove("next-top");
+  if (cfg.nextpos === "top") {
+    inner.insertBefore(next, inner.firstChild);
+    w.classList.add("next-top");
+  } else if (cfg.nextpos === "left" || cfg.nextpos === "right") {
+    stage.appendChild(next);
+    stage.classList.add("next-" + cfg.nextpos);
+  } else {
+    inner.appendChild(next);
+  }
+  if (lightBg) stage.classList.add("light");
   const hasBackdrop = cfg.cover === "backdrop" || cfg.cover === "both";
   if (hasBackdrop) lightBg = false;
   w.classList.toggle("light", lightBg);

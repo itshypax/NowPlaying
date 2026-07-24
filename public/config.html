@@ -135,7 +135,24 @@
     border-radius: 4px;
     user-select: all;
   }
-  #preview-wrap { position: sticky; top: 24px; }
+  #preview-wrap {
+    position: sticky;
+    top: 24px;
+    /* grid items stretch to full row height by default, which leaves sticky
+       no room to move — pin the item to the top instead */
+    align-self: start;
+  }
+  @media (max-width: 900px) {
+    #preview-wrap {
+      order: -1;
+      top: 0;
+      z-index: 5;
+      background: var(--bg);
+      padding: 10px 0;
+      margin-top: -24px;
+      border-bottom: 1px solid var(--border);
+    }
+  }
   #scene {
     position: relative;
     aspect-ratio: 16 / 9;
@@ -302,6 +319,13 @@
         </div>
         <label for="nextLabel" data-i18n="nextLabel"></label>
         <input type="text" id="nextLabel" value="Als Nächstes">
+        <label for="nextPosSel" data-i18n="nextPos"></label>
+        <select id="nextPosSel">
+          <option value="bottom" data-i18n="nextPosBottom"></option>
+          <option value="top" data-i18n="nextPosTop"></option>
+          <option value="left" data-i18n="nextPosLeft"></option>
+          <option value="right" data-i18n="nextPosRight"></option>
+        </select>
       </div>
     </section>
 
@@ -374,6 +398,11 @@ const STR = {
     nextOn: "\u201eAls Nächstes\u201c vor Songende einblenden",
     nextSec: "Einblenden vor Songende",
     nextLabel: "Beschriftung des Banners (leer = ausblenden)",
+    nextPos: "Position des Banners",
+    nextPosBottom: "Unten (Standard)",
+    nextPosTop: "Oben",
+    nextPosLeft: "Links neben dem Widget",
+    nextPosRight: "Rechts neben dem Widget",
     nextDefault: "Als Nächstes",
     urlTitle: "Overlay-URL",
     urlHint: "In OBS als Browserquelle einfügen. Breite der Quelle etwas größer wählen als die Widget-Breite, Höhe ca. 300 px. Hintergrund ist transparent.",
@@ -428,6 +457,11 @@ const STR = {
     nextOn: "Show \u201cUp Next\u201d before the song ends",
     nextSec: "Show before end of song",
     nextLabel: "Banner label (leave empty to hide)",
+    nextPos: "Banner position",
+    nextPosBottom: "Bottom (default)",
+    nextPosTop: "Top",
+    nextPosLeft: "Left of the widget",
+    nextPosRight: "Right of the widget",
     nextDefault: "Up Next",
     urlTitle: "Overlay URL",
     urlHint: "Add as a browser source in OBS. Make the source a bit wider than the widget, height about 300 px. The background is transparent.",
@@ -505,8 +539,48 @@ function buildQuery() {
     const nl = $("nextLabel").value.trim();
     // "Als Nächstes" is the overlay-side default; empty = hide the label
     if (nl !== "Als Nächstes") q.set("nextlabel", nl);
+    if ($("nextPosSel").value !== "bottom") q.set("nextpos", $("nextPosSel").value);
   }
   return q;
+}
+
+// control values persisted via /api/config so the setup survives restarts
+const SAVED_FIELDS = [
+  "labelText", "compactOn", "coverMode", "bgColor", "bgOpacity", "radius", "width",
+  "fontSel", "fontCustomName", "styleSel", "animOn", "animStyleSel",
+  "nextOn", "nextSec", "nextLabel", "nextPosSel",
+];
+let restoring = true;
+let saveTimer;
+
+function collectConfig() {
+  const out = {};
+  for (const id of SAVED_FIELDS) {
+    const el = $(id);
+    out[id] = el.type === "checkbox" ? el.checked : el.value;
+  }
+  return out;
+}
+
+function restoreConfig(saved) {
+  for (const id of SAVED_FIELDS) {
+    if (!(id in saved)) continue;
+    const el = $(id);
+    if (el.type === "checkbox") el.checked = Boolean(saved[id]);
+    else el.value = String(saved[id]);
+  }
+}
+
+function scheduleSave() {
+  if (restoring) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    fetch("/api/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(collectConfig()),
+    }).catch(() => {});
+  }, 600);
 }
 
 let debounce;
@@ -532,6 +606,7 @@ function update() {
     $("preview").src = "/overlay?" + pq.toString();
     scalePreview();
   }, 250);
+  scheduleSave();
 }
 
 function scalePreview() {
@@ -581,6 +656,11 @@ $("connect").addEventListener("click", async () => {
 });
 
 async function init() {
+  try {
+    const saved = await (await fetch("/api/config")).json();
+    restoreConfig(saved);
+  } catch {}
+  restoring = false;
   const status = await (await fetch("/api/status")).json();
   redirectUri = status.redirect_uri;
   authed = status.authed;

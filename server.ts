@@ -32,6 +32,7 @@ type Store = {
   refresh_token?: string;
   access_token?: string;
   expires_at?: number;
+  ui_config?: Record<string, unknown>;
 };
 
 let store: Store = existsSync(DATA_FILE)
@@ -99,6 +100,22 @@ app.post("/api/client-id", async (c: Context) => {
     return c.json({ error: "invalid_client_id" }, 400);
   }
   store.client_id = client_id.trim();
+  save();
+  return c.json({ ok: true });
+});
+
+// the config page persists its control values here so they survive restarts
+app.get("/api/config", (c: Context) => c.json(store.ui_config ?? {}));
+
+app.post("/api/config", async (c: Context) => {
+  const body = await c.req.json().catch(() => null);
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return c.json({ error: "bad_config" }, 400);
+  }
+  if (JSON.stringify(body).length > 4000) {
+    return c.json({ error: "too_large" }, 400);
+  }
+  store.ui_config = body;
   save();
   return c.json({ ok: true });
 });

@@ -28,7 +28,7 @@ The widget shows title, artist, cover art and a progress display in five styles 
 2. Add `http://127.0.0.1:8976/callback` as its redirect URI
 3. Open http://127.0.0.1:8976, paste the app's client ID, click connect
 
-Tokens are stored in `data.json` next to the server. Delete the file to disconnect. The overlay shows whatever plays on your account, regardless of device.
+Tokens are stored in `data.json` next to the server. Delete the file to disconnect. The overlay shows whatever plays on your account, regardless of device. The config page also keeps your last widget settings in the same file, so everything is back the way you left it after a restart.
 
 ## Add to OBS
 
@@ -53,6 +53,7 @@ Everything below is set on the config page and ends up as query parameters, so y
 | `animstyle` | track-change animation: `slide`, `fade`, `board`, `drop`, `spin`, `glitch`, `arrows` | `slide` |
 | `next` | seconds before the end of the song at which the "Up Next" banner appears; `0`/omitted = off | off |
 | `nextlabel` | banner label, empty = hidden | `Als Nächstes` |
+| `nextpos` | where the banner appears: `bottom`, `top`, `left`, `right` (side positions need a wider browser source) | `bottom` |
 | `demo` | `1` shows sample data (used by the preview) | – |
 
 ## Good to know
