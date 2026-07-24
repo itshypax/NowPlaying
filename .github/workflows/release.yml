@@ -3,6 +3,11 @@ name: Release builds
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and attach the binaries to (e.g. v0.1.0)"
+        required: true
 
 permissions:
   contents: write
@@ -12,6 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - uses: oven-sh/setup-bun@v2
       - run: bun install
       - name: Build standalone binaries
@@ -29,4 +36,5 @@ jobs:
           done
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
           files: dist/*.zip
