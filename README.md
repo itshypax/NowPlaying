@@ -11,9 +11,11 @@ The widget shows title, artist, cover art and a progress display in five styles 
 
 ## Quick start
 
-**Without installing anything:** grab the zip for your OS from the [releases page](../../releases), unzip, run `nowplaying` (or `nowplaying.exe`), then open http://127.0.0.1:8976.
+**Without installing anything:** download the file for your OS from the [releases page](../../releases), run it, then open http://127.0.0.1:8976. It's a single file of about 5 MB with the config page and overlay built in. On Linux and macOS, make it executable first with `chmod +x nowplaying-*`.
 
-**From source:** with [Bun](https://bun.sh) it's `bun install && bun start`. With Node 22.18 or newer it's `npm install && npm run start:node`. Same server either way.
+**From source:** with [Rust](https://rustup.rs) installed, `cargo run --release`.
+
+Coming from the old Bun version: put the new file where the old `nowplaying` was, next to `data.json`, and your login and settings carry over.
 
 ## Examples
 
@@ -28,7 +30,7 @@ The widget shows title, artist, cover art and a progress display in five styles 
 2. Add `http://127.0.0.1:8976/callback` as its redirect URI
 3. Open http://127.0.0.1:8976, paste the app's client ID, click connect
 
-Tokens are stored in `data.json` next to the server. Delete the file to disconnect. The overlay shows whatever plays on your account, regardless of device. The config page also keeps your last widget settings in the same file, so everything is back the way you left it after a restart.
+Tokens are stored in `data.json` next to the executable. Delete the file to disconnect. The overlay shows whatever plays on your account, regardless of device. The config page also keeps your last widget settings in the same file, so everything is back the way you left it after a restart.
 
 ## Add to OBS
 
@@ -62,9 +64,9 @@ The progress display is not a real audio analysis. Spotify shut down the audio-a
 
 ## Development
 
-`server.ts` is a small Hono app handling the PKCE flow, token refresh and the Spotify proxying. The overlay and the config page live in `public/` as plain HTML with inline scripts, no build step. `PORT` can be overridden via environment variable (remember to update the redirect URI in your Spotify app to match).
+`src/main.rs` is a small axum server handling the PKCE flow, token refresh and the Spotify proxying. The overlay and the config page live in `public/` as plain HTML with inline scripts and get compiled into the binary, so rebuild after editing them. `cargo test` covers the PKCE challenge, the cover host check and reading an old `data.json`. `PORT` can be overridden via environment variable (remember to update the redirect URI in your Spotify app to match).
 
-Release binaries are built by the GitHub Actions workflow on every `v*` tag via `bun build --compile` for Windows, Linux and macOS.
+Release binaries are built by the GitHub Actions workflow on every `v*` tag for Windows, Linux and macOS (x64 and arm64).
 
 ## License
 
